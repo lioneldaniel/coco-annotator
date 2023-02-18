@@ -1,7 +1,11 @@
 from flask_restplus import Namespace, Resource, reqparse
 from flask_login import login_required, current_user
 
-from database import AnnotationModel
+from database import (
+    ImageModel,
+    AnnotationModel
+)
+
 from ..util import query_util
 
 import datetime
@@ -43,15 +47,13 @@ class Annotation(Resource):
         segmentation = args.get('segmentation', [])
         keypoints = args.get('keypoints', [])
 
-        image = current_user.images.filter(id=image_id, deleted=False).first()
-        if image is None:
-            return {"message": "Invalid image id"}, 400
+        try:
+            image = ImageModel.objects.get(id=image_id)
+            if image is None:
+                raise Exception(f'image {image_id} is None')
+        except:
+            return {'message': f'image {image_id} does not exist'}, 400
         
-        logger.info(
-            f'{current_user.username} has created an annotation for image {image_id} with {isbbox}')
-        logger.info(
-            f'{current_user.username} has created an annotation for image {image_id}')
-
         try:
             annotation = AnnotationModel(
                 image_id=image_id,
@@ -64,6 +66,9 @@ class Annotation(Resource):
             annotation.save()
         except (ValueError, TypeError) as e:
             return {'message': str(e)}, 400
+
+        logger.debug(
+            f'{current_user.username} has created annotation {annotation.id} with category_id={category_id} for image {image_id}')
 
         return query_util.fix_ids(annotation)
 

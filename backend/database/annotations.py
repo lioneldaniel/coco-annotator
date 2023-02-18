@@ -64,7 +64,9 @@ class AnnotationModel(DynamicDocument):
             dataset = DatasetModel.objects(id=self.dataset_id).first()
 
             if dataset is not None:
+                _metadata_copy = self.metadata
                 self.metadata = dataset.default_annotation_metadata.copy()
+                self.metadata.update(_metadata_copy)
 
         if self.color is None:
             self.color = im.Color.random().hex

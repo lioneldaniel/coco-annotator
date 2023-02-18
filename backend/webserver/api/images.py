@@ -13,7 +13,7 @@ from database import (
 
 from PIL import Image
 import datetime
-import os
+from pathlib import Path
 import io
 
 
@@ -31,6 +31,8 @@ image_upload.add_argument('image', location='files',
                           help='PNG or JPG file')
 image_upload.add_argument('dataset_id', required=True, type=int,
                           help='Id of dataset to insert image into')
+image_upload.add_argument('path', default='', required=False, type=str,
+                          help='path of the image relative to the dataset')
 
 image_download = reqparse.RequestParser()
 image_download.add_argument('asAttachment', type=bool, default=False)
@@ -79,28 +81,36 @@ class Images(Resource):
         """ Creates an image """
         args = image_upload.parse_args()
         image = args['image']
+        path_relative_to_the_specified_dataset = args['path']
 
         dataset_id = args['dataset_id']
         try:
             dataset = DatasetModel.objects.get(id=dataset_id)
         except:
-            return {'message': 'dataset does not exist'}, 400
-        directory = dataset.directory
-        path = os.path.join(directory, image.filename)
+            return {'message': f'dataset {dataset_id} does not exist'}, 400
+        directory = Path(dataset.directory)
+        path = directory / path_relative_to_the_specified_dataset / image.filename
+        try:
+            path.resolve().relative_to(directory.resolve())
+        except:
+            return {'message': f'attempt to path traversal with path={path_relative_to_the_specified_dataset} and filename={image.filename}'}, 400
 
-        if os.path.exists(path):
-            return {'message': 'file already exists'}, 400
+        if path.exists():
+            return {'message': f'file {path} already exists'}, 400
 
         pil_image = Image.open(io.BytesIO(image.read()))
+
+        path.parent.mkdir( parents=True, exist_ok=True )
+        path_as_string = str(path)
 
         pil_image.save(path)
 
         image.close()
         pil_image.close()
         try:
-            db_image = ImageModel.create_from_path(path, dataset_id).save()
+            db_image = ImageModel.create_from_path(path_as_string, dataset_id).save()
         except NotUniqueError:
-            db_image = ImageModel.objects.get(path=path)
+            db_image = ImageModel.objects.get(path=path_as_string)
         return db_image.id
 
 
